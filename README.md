@@ -1,54 +1,70 @@
-# CopilotKit + LangGraph + Next.js 集成教程
+# CopilotKit + LangGraph + Next.js 集成
 
-本教程演示如何将 CopilotKit 集成到 Next.js 应用中，连接到 LangGraph 后端服务。
+快速集成 CopilotKit 和 LangGraph，构建 AI 原生应用。
 
-## 前置条件
+## 🏗️ 架构
 
-1. **LangGraph 服务运行在 `http://localhost:2024`**
-   - 确保你的 LangGraph Platform 或 LangGraph Studio 已启动
-   - 可以通过访问 `http://localhost:2024/docs` 验证服务是否运行
+```mermaid
+graph LR
+    A[Frontend<br/>Next.js + CopilotSidebar] --> B[CopilotKit Runtime<br/>API Route]
+    B --> C[LangGraphAgent]
+    C --> D[LangGraph Backend<br/>localhost:2024]
+    D --> C
+    C --> B
+    B --> A
 
-2. **Node.js 和 pnpm 环境**
-   ```bash
-   node --version  # 推荐 v18+
-   pnpm --version  # 推荐 v8+
-   ```
-
-## 步骤 1: 创建 Next.js 项目
-
-```bash
-npx create-next-app@latest test-copilotkit
-cd test-copilotkit
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
 ```
 
-## 步骤 2: 安装 CopilotKit 依赖
+**数据流**: `Frontend → CopilotKit Runtime → LangGraph → LangGraph Backend`
+
+**关键组件**:
+- **CopilotSidebar**: 聊天界面组件
+- **CopilotKit Runtime**: 中间层，处理 API 请求
+- **LangGraphAgent**: 连接 LangGraph 服务的桥梁
+- **LangGraph Backend**: 你的 AI 代理服务
+
+## 🚀 Quick Start
+
+### 前置条件
+- Node.js 18+
+- pnpm
+- LangGraph 服务运行在 `http://localhost:2024`
+
+**⚠️ 重要提示**：
+- LangGraph 服务默认端口是 **2024**，但如果使用 `langgraph up` 启动，端口可能不同
+- Agent 名称必须与 `langgraph.json` 中的 `graphs` 字段对应
+- 每个 graph ID 会自动创建一个默认 assistant
+
+### 1. 创建项目
+
+```bash
+npx create-next-app@latest my-copilot-app
+cd my-copilot-app
+```
+
+### 2. 安装依赖
 
 ```bash
 pnpm add @copilotkit/react-ui @copilotkit/react-core @copilotkit/runtime openai@^4.85.1 zod@^3.23.8
 ```
 
-**注意**:
-- 使用 `openai@^4.85.1` 而不是最新版本，以避免 peer dependency 警告
-- 如果遇到网络慢的问题，建议切换到国内镜像源：
-  ```bash
-  pnpm config set registry https://registry.npmmirror.com
-  ```
-
-## 步骤 3: 配置环境变量
-
-创建 `.env` 文件：
+### 3. 配置环境变量
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
-# 可选：如果你的 LangGraph 服务不在默认地址
+# 注意：纯 LangGraph 模式下，可以使用假 API key
+OPENAI_API_KEY=sk-1234567890abcdef
 LANGGRAPH_DEPLOYMENT_URL=http://localhost:2024
-# 可选：LangSmith 监控密钥
-LANGSMITH_API_KEY=your_langsmith_api_key_here
+# ⚠️ 如果使用 langgraph up 启动，请确认实际端口并修改
+# 例如：LANGGRAPH_DEPLOYMENT_URL=http://localhost:8124
 ```
 
-## 步骤 4: 创建 CopilotKit API 路由
+### 4. 创建 API 路由
 
-创建 `app/api/copilotkit/route.ts` 文件：
+`app/api/copilotkit/route.ts`:
 
 ```typescript
 import {
@@ -65,9 +81,9 @@ const serviceAdapter = new OpenAIAdapter({ openai } as any);
 
 const runtime = new CopilotRuntime({
   agents: {
-    'my_agent': new LangGraphAgent({
+    'default': new LangGraphAgent({
       deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:2024",
-      graphId: 'agent',
+      graphId: 'agent', // ⚠️ 必须与 langgraph.json 中的 graphs 字段对应
     })
   },
 });
@@ -83,134 +99,35 @@ export const POST = async (req: NextRequest) => {
 };
 ```
 
-## 步骤 5: 验证 LangGraph 服务
-
-检查你的 LangGraph 服务配置：
-
-1. **验证服务运行状态**：
-   ```bash
-   curl http://localhost:2024/docs
-   ```
-
-2. **获取可用的 graph_id**：
-   ```bash
-   curl -X POST http://localhost:2024/assistants \
-     -H "Content-Type: application/json" \
-     -d '{"graph_id":"agent"}'
-   ```
-
-3. **查看 API 端点**：
-   ```bash
-   curl -s http://localhost:2024/openapi.json | jq '.paths | keys'
-   ```
-
-## 步骤 6: 启动开发服务器
-
-```bash
-pnpm dev
-```
-
-服务器应该运行在 `http://localhost:3000`。
-
-## 步骤 7: 测试 API 连接
-
-使用 curl 测试 CopilotKit API 端点：
-
-**测试 1: 获取运行时信息 (推荐)**
-```bash
-# Linux/macOS/Git Bash
-curl -X POST http://localhost:3000/api/copilotkit \
-  -H "Content-Type: application/json" \
-  -d '{"method":"info","params":{}}'
-
-# Windows PowerShell
-curl.exe -X POST http://localhost:3000/api/copilotkit -H "Content-Type: application/json" -d '{"method":"info","params":{}}'
-```
-
-**预期响应**:
-```json
-{
-  "version": "0.0.33",
-  "agents": {
-    "my_agent": {
-      "name": "my_agent",
-      "description": "",
-      "className": "LangGraphAgent"
+**📋 配置说明**：
+- `graphId: 'agent'` 必须与你的 `langgraph.json` 中的 graph ID 完全匹配
+- 例如，如果你的 `langgraph.json` 如下：
+  ```json
+  {
+    "graphs": {
+      "customer_support": "./src/agent.py:graph",
+      "sales_bot": "./src/sales.py:graph"
     }
-  },
-  "audioFileTranscriptionEnabled": false
-}
-```
+  }
+  ```
+  那么你应该使用对应的 graph ID（如 `"customer_support"` 或 `"sales_bot"`）
 
-**测试 2: 运行 Agent (需要 LangGraph 后端正常工作)**
-```bash
-# Linux/macOS/Git Bash
-curl -X POST http://localhost:3000/api/copilotkit \
-  -H "Content-Type: application/json" \
-  -d '{"method":"agent/run","params":{"agentId":"my_agent"},"body":{"messages":[{"role":"user","content":"Hello"}],"threadId":"test-thread-1"}}'
+### 5. 配置布局
 
-# Windows PowerShell
-curl.exe -X POST http://localhost:3000/api/copilotkit -H "Content-Type: application/json" -d '{"method":"agent/run","params":{"agentId":"my_agent"},"body":{"messages":[{"role":"user","content":"Hello"}],"threadId":"test-thread-1"}}'
-```
-
-**CopilotKit API 协议说明**:
-- CopilotKit 使用统一的单端点 API，所有操作都通过 `POST /api/copilotkit`
-- 请求格式：`{"method": "操作类型", "params": {}, "body": {}}`
-- 支持的方法：
-  - `info` - 获取运行时信息
-  - `agent/run` - 执行 agent
-  - `agent/connect` - 建立持久连接
-  - `agent/stop` - 停止 agent 执行
-
-**测试结果解释**:
-- ✅ **200 响应 + JSON 数据** - API 完全正常工作
-- ❌ **连接超时** - LangGraph 后端可能有问题或配置不正确
-- 🚫 **404 错误** - API 路由配置有问题
-- 🚫 **Invalid single-route payload** - 请求格式错误（使用上面的正确格式）
-
-## 步骤 8: 集成前端 CopilotKit 组件
-
-现在我们已经验证了后端 API 正常工作，接下来集成前端组件。
-
-### 8.1 修改 layout.tsx 添加 CopilotKit Provider
-
-修改 `app/layout.tsx` 文件，添加 CopilotKit Provider：
+`app/layout.tsx`:
 
 ```tsx
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// 导入 CopilotKit 相关组件
 import { CopilotKit } from "@copilotkit/react-core";
 import "@copilotkit/react-ui/styles.css";
 
-export const metadata: Metadata = {
-  title: "Create Next App",
-  description: "Generated by create next app",
-};
-
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {/* 包装整个应用，提供 CopilotKit 上下文 */}
+      <body>
         <CopilotKit runtimeUrl="/api/copilotkit" showDevConsole={false}>
           {children}
         </CopilotKit>
@@ -220,15 +137,9 @@ export default function RootLayout({
 }
 ```
 
-**关键改动说明**：
-- 导入 `CopilotKit` 组件和样式文件
-- 用 `CopilotKit` 包装整个应用
-- `runtimeUrl="/api/copilotkit"` 指向我们创建的 API 端点
-- `showDevConsole={false}` 禁用开发控制台（避免 MetaMask 检测问题）
+### 6. 添加聊天界面
 
-### 8.2 修改 page.tsx 添加聊天界面
-
-修改 `app/page.tsx` 文件，添加 CopilotSidebar：
+`app/page.tsx`:
 
 ```tsx
 import { CopilotSidebar } from "@copilotkit/react-ui";
@@ -236,57 +147,47 @@ import { CopilotSidebar } from "@copilotkit/react-ui";
 export default function Home() {
   return (
     <main>
-      <h1>Your App</h1>
-      <p>这是一个集成 CopilotKit + LangGraph 的示例应用</p>
-      {/* 添加 CopilotKit 聊天侧边栏 */}
+      <h1>My AI App</h1>
+      <p>Powered by CopilotKit + LangGraph</p>
       <CopilotSidebar />
     </main>
   );
 }
 ```
 
-**说明**：
-- `CopilotSidebar` 是 CopilotKit 提供的现成聊天界面
-- 默认会显示一个"Open Chat"按钮
-- 点击后会展开完整的聊天界面
+### 7. 启动应用
 
-### 8.3 测试前端集成
-
-保存所有文件后，检查浏览器中的页面：
-
-1. **页面应该显示**：
-   - "Your App" 标题
-   - 中文描述文字
-   - "Open Chat" 按钮（CopilotSidebar）
-   - "Powered by CopilotKit" 文字
-
-2. **功能测试**：
-   - 点击"Open Chat"按钮，应该展开聊天界面
-   - 在输入框中输入消息
-   - 点击发送按钮
-
-**预期行为**：
-- 聊天界面应该正常打开和关闭
-- 消息应该能够发送（即使 LangGraph 后端可能还没完全配置好）
-- 没有控制台错误
-
-## 步骤 9: 解决 MetaMask 连接错误
-
-### 9.1 问题描述
-
-在使用过程中，你可能会遇到以下错误：
-```
-Uncaught (in promise) i: Failed to connect to MetaMask
-Caused by: Error: MetaMask extension not found
+```bash
+pnpm dev
 ```
 
-### 9.2 问题原因
+访问 `http://localhost:3000`，点击 "Open Chat" 开始对话！
 
-这个错误来自 CopilotKit 的开发控制台功能。它会自动检测浏览器中的各种扩展，包括 Web3 钱包（如 MetaMask），即使用户没有安装这些扩展。
+### 8. 验证集成
 
-### 9.3 解决方案
+```bash
+# 测试 API
+curl -X POST http://localhost:3000/api/copilotkit \
+  -H "Content-Type: application/json" \
+  -d '{"method":"info","params":{}}'
+```
 
-在 `app/layout.tsx` 中禁用开发控制台：
+## ❓ FAQ
+
+### Q: 为什么需要 OpenAI API key？
+
+**A**: 纯 LangGraph 模式下不需要真实的 OpenAI API key！CopilotKit 框架强制要求一个 `ServiceAdapter`，但 `LangGraphAgent` 独立工作。使用假 key（如 `sk-1234567890abcdef`即可。
+
+### Q: 什么时候需要真实的 OpenAI API key？
+
+**A**: 只有在以下情况需要：
+- 直接使用 OpenAI 模型（不通过 LangGraph）
+- LangGraph 内部配置调用 OpenAI API
+- 需要容错机制（LangGraph 失败时 fallback 到 OpenAI）
+
+### Q: 如何解决 MetaMask 连接错误？
+
+**A**: 在 `CopilotKit` 组件中添加 `showDevConsole={false}`：
 
 ```tsx
 <CopilotKit runtimeUrl="/api/copilotkit" showDevConsole={false}>
@@ -294,222 +195,103 @@ Caused by: Error: MetaMask extension not found
 </CopilotKit>
 ```
 
-**效果**：
-- ✅ MetaMask 连接错误消失
-- ✅ 聊天功能正常工作
-- ⚠️ 开发时无法使用 CopilotKit 的调试控制台（生产环境应该关闭）
+### Q: Agent ID 不匹配错误？
 
-### 9.4 验证修复
+**A**: 确保 API 路由中的 graph ID 与 `langgraph.json` 中的定义一致：
 
-刷新页面，重新测试：
-1. 打开浏览器控制台，确认没有 MetaMask 错误
-2. 点击"Open Chat"按钮，正常打开聊天界面
-3. 发送消息，确认功能正常
-
-## 步骤 10: 验证集成
-
-检查以下内容，确认集成成功：
-
-### 10.1 前端检查
-- ✅ 页面正常显示，没有布局错误
-- ✅ CopilotSidebar 组件正常渲染
-- ✅ 点击"Open Chat"可以打开聊天界面
-- ✅ 控制台没有错误信息
-
-### 10.2 后端检查
-- ✅ 开发服务器没有 TypeScript 编译错误
-- ✅ API 请求能够到达 `/api/copilotkit` 端点
-- ✅ 没有 LangGraph 连接错误（如果后端服务正常运行）
-
-### 10.3 端到端测试
-1. 打开聊天界面
-2. 输入测试消息（如 "Hello"）
-3. 点击发送
-4. 观察是否有响应（需要 LangGraph 后端支持）
-
-## 常见问题解决
-
-### 1. TypeScript 错误：LangGraphAgent 类型不匹配
-
-**问题**: `LangGraphAgent is missing properties from type 'AbstractAgent'`
-
-**解决**: 确保从正确的路径导入：
 ```typescript
-import { LangGraphAgent } from "@copilotkit/runtime/langgraph"; // 正确
-// 而不是
-import { LangGraphAgent } from "@copilotkit/runtime"; // 错误
-```
-
-### 2. Peer Dependency 警告
-
-**问题**: `unmet peer openai@^4.85.1: found 5.9.0`
-
-**解决**: 降级 OpenAI 到兼容版本：
-```bash
-pnpm add openai@^4.85.1
-```
-
-### 3. API 路由 404 错误
-
-**问题**: `POST /api/copilotkit 404`
-
-**解决**: 确保文件路径正确：
-- 文件应该在 `app/api/copilotkit/route.ts`
-- 而不是 `app/api/route.ts`
-
-### 4. 网络下载慢
-
-**解决**: 切换到国内镜像源：
-```bash
-pnpm config set registry https://registry.npmmirror.com
-```
-
-### 5. MetaMask 连接错误
-
-**问题**: 页面出现 "Failed to connect to MetaMask" 错误，即使没有安装 MetaMask
-
-**原因**: CopilotKit 的开发控制台会尝试检测各种浏览器扩展，包括 Web3 钱包
-
-**解决**: 禁用 CopilotKit 开发控制台：
-```tsx
-// app/layout.tsx
-<CopilotKit runtimeUrl="/api/copilotkit" showDevConsole={false}>
-  {children}
-</CopilotKit>
-```
-
-这样会禁用开发时的调试控制台，同时避免不必要的 Web3 检测。
-
-### 6. Agent ID 不匹配错误
-
-**问题**: `useAgent: Agent 'my_agent' not found`
-
-**原因**: API 路由中配置的 agent ID 与前端请求的不匹配
-
-**解决**: 确保 agent ID 一致：
-```typescript
-// app/api/copilotkit/route.ts
 const runtime = new CopilotRuntime({
   agents: {
-    'default': new LangGraphAgent({  // 使用 'default' 而不是 'my_agent'
-      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:2024",
-      graphId: 'agent',
+    'default': new LangGraphAgent({
+      ...
+      graphId: 'agent', // 必须与 langgraph.json 中的 graphs 字段对应
     })
   },
 });
 ```
 
-### 7. HTML 结构错误
+**常见错误**：
+- 使用了错误的 graph ID（如使用了文件名而不是定义的 ID）
+- `langgraph.json` 中定义了多个 graph，但使用了不存在的 ID
+- 端口配置错误（特别是使用 `langgraph up` 时）
 
-**问题**: `<main> cannot be a child of <html>`
+### Q: TypeScript 错误：LangGraphAgent 类型不匹配？
 
-**原因**: 在 layout.tsx 中意外删除了 `<body>` 标签
+**A**: 确保从正确路径导入：
 
-**解决**: 确保正确的 HTML 结构：
-```tsx
-<html lang="en">
-  <body>
-    <CopilotKit runtimeUrl="/api/copilotkit">
-      {children}
-    </CopilotKit>
-  </body>
-</html>
+```typescript
+import { LangGraphAgent } from "@copilotkit/runtime/langgraph"; // ✅ 正确
+// 而不是
+import { LangGraphAgent } from "@copilotkit/runtime"; // ❌ 错误
 ```
 
-## 架构说明
+### Q: 如何解决 peer dependency 警告？
 
-```
-Frontend (Next.js)     CopilotKit Runtime     LangGraph Backend
-     │                        │                        │
-     │  HTTP Request          │                        │
-     ├──────────────────────►│                        │
-     │                        │  HTTP Request          │
-     │                        ├──────────────────────►│
-     │                        │                        │  LangGraph
-     │                        │◄──────────────────────│  Processing
-     │  Response              │                        │
-     │◄───────────────────────│                        │
+**A**: 使用兼容的 OpenAI 版本：
+
+```bash
+pnpm add openai@^4.85.1
 ```
 
-- **CopilotKit Runtime**: 作为中间层，处理前端请求并转发到 LangGraph
-- **LangGraphAgent**: 负责与 LangGraph Platform/Studio 的通信
-- **OpenAIAdapter**: 提供 OpenAI 模型支持（如果需要）
+### Q: 如何确认 LangGraph 服务的端口？
 
-## 下一步
+**A**: 根据启动方式确认端口：
 
-现在你已经完成了基础集成，接下来可以：
+1. **使用 `langgraph dev`（开发模式）**：
+   ```bash
+   # 默认端口 2024
+   langgraph dev
+   # 或指定端口
+   langgraph dev --port 3000
+   ```
 
-1. **添加前端 CopilotKit 组件**
-2. **配置自定义 Actions 和 Tools**
-3. **添加状态管理**
-4. **实现用户界面**
+2. **使用 `langgraph up`（生产模式）**：
+   ```bash
+   langgraph up  # 可能使用不同端口，查看输出信息
+   ```
 
-## 项目结构
+3. **检查服务状态**：
+   ```bash
+   # 查看端口占用
+   netstat -an | grep :2024  # macOS/Linux
+   netstat -ano | findstr :2024  # Windows
 
-完成集成后，项目结构如下：
+   # 测试 API
+   curl http://localhost:2024/docs
+   ```
 
+### Q: langgraph.json 中有多个 graph 怎么办？
+
+**A**: 每个 graph ID 都会创建独立的 assistant：
+
+```json
+{
+  "graphs": {
+    "customer_support": "./src/support.py:graph",
+    "sales_assistant": "./src/sales.py:graph",
+    "tech_helper": "./src/tech.py:graph"
+  }
+}
 ```
-test-copilotkit/
-├── app/
-│   ├── api/
-│   │   └── copilotkit/
-│   │       └── route.ts          # CopilotKit API 路由
-│   ├── layout.tsx                # 根布局，包含 CopilotKit Provider
-│   ├── page.tsx                  # 主页，包含 CopilotSidebar
-│   └── globals.css               # 全局样式
-├── .env                          # 环境变量配置
-├── package.json                  # 项目依赖和脚本
-├── pnpm-lock.yaml               # 锁定依赖版本
-└── README.md                     # 本教程文档
+
+使用时指定对应的 graph ID：
+```typescript
+new LangGraphAgent({
+  deploymentUrl: "http://localhost:2024",
+  graphId: 'customer_support', // 或 'sales_assistant' 或 'tech_helper'
+})
 ```
 
-**关键文件说明**：
-- `app/api/copilotkit/route.ts`: 后端 API 端点，连接 LangGraph
-- `app/layout.tsx`: 应用根布局，提供 CopilotKit 上下文
-- `app/page.tsx`: 主页面组件，展示聊天界面
-- `.env`: 存储敏感信息（API 密钥等）
+### Q: 网络下载太慢怎么办？
 
-## 总结
+**A**: 切换到国内镜像源：
 
-通过以上步骤，你成功地将 CopilotKit 集成到了 Next.js 应用中，并连接到了 LangGraph 后端。这为构建 AI 原生应用奠定了基础。
+```bash
+pnpm config set registry https://registry.npmmirror.com
+```
 
-### ✅ 成功验证清单
+## 📚 相关资源
 
-完成教程后，你应该能够确认以下所有功能正常：
-
-**后端集成**：
-- ✅ CopilotKit API 路由正确创建在 `app/api/copilotkit/route.ts`
-- ✅ API 端点响应 `info` 请求，返回运行时信息
-- ✅ LangGraphAgent 配置正确，指向 `http://localhost:2024`
-- ✅ 没有 TypeScript 编译错误
-
-**前端集成**：
-- ✅ CopilotKit Provider 正确包装应用
-- ✅ CopilotSidebar 组件在页面中显示
-- ✅ 点击"Open Chat"可以打开聊天界面
-- ✅ 消息输入和发送功能正常
-- ✅ 没有 MetaMask 连接错误
-
-**整体功能**：
-- ✅ 前后端通信正常
-- ✅ 开发服务器稳定运行
-- ✅ 浏览器控制台无错误
-- ✅ 用户体验流畅
-
-### 🚀 下一步建议
-
-现在基础集成已经完成，你可以继续探索：
-
-1. **自定义聊天界面**：使用 `useCopilotChat` hook 构建自定义 UI
-2. **添加 Actions**：集成应用功能和数据到 AI 对话中
-3. **多模态支持**：添加图片、文件上传等功能
-4. **用户认证**：集成用户身份验证
-5. **部署到生产**：将应用部署到 Vercel、Netlify 等平台
-
-### 📚 相关资源
-
-- [CopilotKit 官方文档](https://docs.copilotkit.ai)
+- [CopilotKit 文档](https://docs.copilotkit.ai)
 - [LangGraph 文档](https://langchain-ai.github.io/langgraph/)
 - [Next.js 文档](https://nextjs.org/docs)
-
-祝你在 AI 应用开发的道路上越走越远！🎉
